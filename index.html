@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Super Powers Cam</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <h1>Super Powers Cam</h1>
+      <p>Punch and eye effects in real time</p>
+    </header>
+
+    <main class="stage-frame">
+      <video id="inputVideo" playsinline muted></video>
+      <canvas id="stage"></canvas>
+      <div id="status" class="status-pill">Loading...</div>
+    </main>
+
+    <footer class="control-dock">
+      <label class="control">
+        <span>Punch Effect</span>
+        <select id="punchEffect">
+          <option value="sparks">Sparks</option>
+          <option value="shockwave">Shockwave</option>
+          <option value="plasma">Plasma Burst</option>
+          <option value="debris">Debris Hit</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+
+      <label class="control">
+        <span>Eye Effect</span>
+        <select id="eyeEffect">
+          <option value="heat">Heat Vision</option>
+          <option value="arc">Electric Arc</option>
+          <option value="glow">Energy Glow</option>
+          <option value="ember">Molten Iris</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+
+      <button id="recordBtn" class="action-btn primary" type="button">Start Recording</button>
+      <button id="stopBtn" class="action-btn" type="button" disabled>Stop</button>
+      <a id="downloadLink" class="action-btn download" hidden download="super-powers.webm">Download Video</a>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
