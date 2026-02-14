@@ -9,6 +9,7 @@ const canvasEl = document.getElementById("stage");
 const statusEl = document.getElementById("status");
 const punchSelect = document.getElementById("punchEffect");
 const eyeSelect = document.getElementById("eyeEffect");
+const mouthSelect = document.getElementById("mouthEffect");
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
 const downloadLink = document.getElementById("downloadLink");
@@ -30,9 +31,166 @@ let activeRecordingUrl = null;
 
 const handMotionState = new Map();
 const punchBursts = [];
+const mouthParticles = [];
+const mouthWaves = [];
 const detectIntervalMs = 34;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const randomBetween = (min, max) => Math.random() * (max - min) + min;
+let lastMouthEmitMs = 0;
+let mouthEmitCarry = 0;
+let lastMouthWaveMs = 0;
+let smoothedMouthOpenRatio = 0;
+let mouthOpenVelocity = 0;
+let smoothedMouthCenter = null;
+let mouthCenterVelocity = { x: 0, y: 0 };
+let lastMouthStateMs = 0;
+
+const mouthEffectProfiles = {
+  fire: {
+    openThreshold: 0.055,
+    fullOpen: 0.22,
+    rateBase: 18,
+    rateScale: 72,
+    minSpeed: 240,
+    maxSpeed: 920,
+    gravity: 380,
+    drag: 1.65,
+    spread: 0.72,
+    sideKick: 145,
+    lifeMin: 180,
+    lifeMax: 540,
+    sizeMin: 1.7,
+    sizeMax: 5.9,
+    growth: 1.5,
+    opacityMin: 0.45,
+    opacityMax: 0.9,
+    fadePower: 1.35,
+    trail: 0.1,
+    additive: true,
+    hazeTone: "255,133,72",
+    colors: ["255,246,224", "255,196,108", "255,126,52", "238,70,28"]
+  },
+  plasma: {
+    openThreshold: 0.055,
+    fullOpen: 0.2,
+    rateBase: 16,
+    rateScale: 62,
+    minSpeed: 280,
+    maxSpeed: 980,
+    gravity: 220,
+    drag: 1.45,
+    spread: 0.64,
+    sideKick: 120,
+    lifeMin: 180,
+    lifeMax: 520,
+    sizeMin: 1.5,
+    sizeMax: 5.2,
+    growth: 1.35,
+    opacityMin: 0.42,
+    opacityMax: 0.88,
+    fadePower: 1.32,
+    trail: 0.12,
+    additive: true,
+    hazeTone: "116,215,255",
+    colors: ["233,255,255", "162,246,255", "112,213,255", "84,148,255"]
+  },
+  frost: {
+    openThreshold: 0.048,
+    fullOpen: 0.18,
+    rateBase: 12,
+    rateScale: 46,
+    minSpeed: 150,
+    maxSpeed: 520,
+    gravity: 40,
+    drag: 1.2,
+    spread: 0.95,
+    sideKick: 88,
+    lifeMin: 340,
+    lifeMax: 900,
+    sizeMin: 2.1,
+    sizeMax: 7.2,
+    growth: 1.95,
+    opacityMin: 0.24,
+    opacityMax: 0.58,
+    fadePower: 1.15,
+    trail: 0.04,
+    additive: false,
+    hazeTone: "183,228,255",
+    colors: ["242,251,255", "205,236,255", "170,217,248", "145,189,226"]
+  },
+  smoke: {
+    openThreshold: 0.03,
+    fullOpen: 0.14,
+    rateBase: 8,
+    rateScale: 26,
+    minSpeed: 100,
+    maxSpeed: 300,
+    gravity: -170,
+    drag: 0.7,
+    spread: 1.18,
+    sideKick: 110,
+    lifeMin: 850,
+    lifeMax: 1800,
+    sizeMin: 3.4,
+    sizeMax: 10.6,
+    growth: 2.4,
+    opacityMin: 0.12,
+    opacityMax: 0.32,
+    fadePower: 1.05,
+    trail: 0,
+    additive: false,
+    hazeTone: "170,178,190",
+    colors: ["225,230,236", "170,179,192", "126,135,148", "98,106,121"]
+  },
+  toxic: {
+    openThreshold: 0.04,
+    fullOpen: 0.16,
+    rateBase: 10,
+    rateScale: 34,
+    minSpeed: 130,
+    maxSpeed: 420,
+    gravity: -85,
+    drag: 0.95,
+    spread: 1.05,
+    sideKick: 102,
+    lifeMin: 480,
+    lifeMax: 1300,
+    sizeMin: 2.5,
+    sizeMax: 8.8,
+    growth: 2,
+    opacityMin: 0.16,
+    opacityMax: 0.44,
+    fadePower: 1.1,
+    trail: 0.02,
+    additive: false,
+    hazeTone: "166,232,92",
+    colors: ["226,251,172", "176,236,118", "132,196,82", "95,149,70"]
+  },
+  sonic: {
+    openThreshold: 0.09,
+    fullOpen: 0.28,
+    rateBase: 2,
+    rateScale: 6,
+    minSpeed: 100,
+    maxSpeed: 220,
+    gravity: -90,
+    drag: 1.8,
+    spread: 0.66,
+    sideKick: 48,
+    lifeMin: 160,
+    lifeMax: 360,
+    sizeMin: 1.8,
+    sizeMax: 3.8,
+    growth: 0.6,
+    opacityMin: 0.09,
+    opacityMax: 0.24,
+    fadePower: 1.4,
+    trail: 0.03,
+    additive: false,
+    hazeTone: "225,238,255",
+    colors: ["238,246,255", "196,215,236", "157,176,198", "131,146,166"]
+  }
+};
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -190,6 +348,551 @@ function getEyeCenters(faceLandmarks) {
   }
 
   return { left, right };
+}
+
+function getMouthData(faceLandmarks) {
+  const upperLip = faceLandmarks?.[13];
+  const lowerLip = faceLandmarks?.[14];
+  const leftCorner = faceLandmarks?.[61] || faceLandmarks?.[78];
+  const rightCorner = faceLandmarks?.[291] || faceLandmarks?.[308];
+
+  if (!upperLip || !lowerLip || !leftCorner || !rightCorner) {
+    return null;
+  }
+
+  const upper = toCanvasPoint(upperLip);
+  const lower = toCanvasPoint(lowerLip);
+  const left = toCanvasPoint(leftCorner);
+  const right = toCanvasPoint(rightCorner);
+  const center = {
+    x: (upper.x + lower.x) * 0.5,
+    y: (upper.y + lower.y) * 0.5
+  };
+  const axisX = normalizeVector(right.x - left.x, right.y - left.y);
+  let forward = normalizeVector(lower.x - upper.x, lower.y - upper.y);
+
+  if (faceLandmarks?.[1]) {
+    const nose = toCanvasPoint(faceLandmarks[1]);
+    const awayFromNose = normalizeVector(center.x - nose.x, center.y - nose.y);
+    forward = normalizeVector(
+      forward.x * 0.4 + awayFromNose.x * 0.6,
+      forward.y * 0.4 + awayFromNose.y * 0.6
+    );
+  }
+
+  const width = Math.max(1, Math.hypot(right.x - left.x, right.y - left.y));
+  const openness = Math.hypot(lower.x - upper.x, lower.y - upper.y);
+
+  return {
+    center,
+    left,
+    right,
+    upper,
+    lower,
+    width,
+    openness,
+    openRatio: openness / width,
+    axisX,
+    forward,
+    normal: {
+      x: -forward.y,
+      y: forward.x
+    }
+  };
+}
+
+function getMouthOpenIntensity(mouth, profile) {
+  if (!mouth || !profile) {
+    return 0;
+  }
+  return clamp(
+    (mouth.openRatio - profile.openThreshold) /
+      Math.max(0.001, profile.fullOpen - profile.openThreshold),
+    0,
+    1.35
+  );
+}
+
+function getMouthEffectTones(effect) {
+  if (effect === "fire") {
+    return {
+      rim: "255, 149, 86",
+      core: "255, 237, 196",
+      plume: "255, 118, 52"
+    };
+  }
+  if (effect === "plasma") {
+    return {
+      rim: "142, 226, 255",
+      core: "228, 250, 255",
+      plume: "100, 176, 255"
+    };
+  }
+  if (effect === "frost") {
+    return {
+      rim: "188, 229, 255",
+      core: "242, 252, 255",
+      plume: "155, 201, 236"
+    };
+  }
+  if (effect === "toxic") {
+    return {
+      rim: "181, 238, 120",
+      core: "235, 255, 191",
+      plume: "133, 198, 88"
+    };
+  }
+  if (effect === "smoke") {
+    return {
+      rim: "178, 187, 199",
+      core: "227, 232, 238",
+      plume: "140, 150, 164"
+    };
+  }
+  return {
+    rim: "213, 226, 246",
+    core: "239, 247, 255",
+    plume: "172, 191, 214"
+  };
+}
+
+function updateMouthDynamics(mouth, nowMs) {
+  const dtMs = lastMouthStateMs ? nowMs - lastMouthStateMs : 16;
+  const dt = clamp(dtMs / 1000, 0.008, 0.09);
+  const blend = 1 - Math.exp(-dt * 12.5);
+
+  const targetOpen = mouth?.openRatio || 0;
+  const previousOpen = smoothedMouthOpenRatio;
+  smoothedMouthOpenRatio += (targetOpen - smoothedMouthOpenRatio) * blend;
+  mouthOpenVelocity = (smoothedMouthOpenRatio - previousOpen) / dt;
+
+  if (mouth?.center) {
+    if (!smoothedMouthCenter) {
+      smoothedMouthCenter = {
+        x: mouth.center.x,
+        y: mouth.center.y
+      };
+      mouthCenterVelocity = { x: 0, y: 0 };
+    } else {
+      const prevCenter = {
+        x: smoothedMouthCenter.x,
+        y: smoothedMouthCenter.y
+      };
+      smoothedMouthCenter.x += (mouth.center.x - smoothedMouthCenter.x) * blend;
+      smoothedMouthCenter.y += (mouth.center.y - smoothedMouthCenter.y) * blend;
+      mouthCenterVelocity = {
+        x: (smoothedMouthCenter.x - prevCenter.x) / dt,
+        y: (smoothedMouthCenter.y - prevCenter.y) / dt
+      };
+    }
+  } else {
+    smoothedMouthCenter = null;
+    mouthCenterVelocity = {
+      x: mouthCenterVelocity.x * 0.72,
+      y: mouthCenterVelocity.y * 0.72
+    };
+  }
+
+  lastMouthStateMs = nowMs;
+
+  return {
+    openRatio: smoothedMouthOpenRatio,
+    openVelocity: mouthOpenVelocity,
+    centerVelocity: mouthCenterVelocity
+  };
+}
+
+function emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs, frameMs) {
+  if (!profile || openness <= 0) {
+    return;
+  }
+
+  const burstBoost = clamp(Math.max(0, mouthState.openVelocity) * 0.045, 0, 1);
+  const rate = profile.rateBase + profile.rateScale * openness * (1 + burstBoost);
+  mouthEmitCarry += (frameMs / 1000) * rate;
+  const emitCount = Math.min(26, Math.floor(mouthEmitCarry));
+
+  if (emitCount <= 0) {
+    return;
+  }
+
+  mouthEmitCarry -= emitCount;
+  const advection = {
+    x: mouthState.centerVelocity.x * 0.1,
+    y: mouthState.centerVelocity.y * 0.1
+  };
+
+  for (let i = 0; i < emitCount; i += 1) {
+    const spread = randomBetween(-profile.spread, profile.spread) * (0.78 + (1 - openness) * 0.34);
+    const direction = normalizeVector(
+      mouth.forward.x + mouth.normal.x * spread,
+      mouth.forward.y + mouth.normal.y * spread
+    );
+    const speed = randomBetween(profile.minSpeed, profile.maxSpeed) * (0.62 + openness * 1.02);
+    const sideKick = randomBetween(-profile.sideKick, profile.sideKick) * (0.42 + openness * 0.85);
+    const mouthSpanOffset = randomBetween(-0.42, 0.42) * mouth.width;
+    const originForward = randomBetween(0, mouth.width * (0.2 + openness * 0.14));
+    const turbulence = randomBetween(0.35, 1.45) * (0.5 + openness * 0.85);
+    const aspectBase =
+      effect === "smoke" || effect === "toxic"
+        ? randomBetween(0.95, 2.15)
+        : randomBetween(0.58, 1.6);
+
+    mouthParticles.push({
+      bornAt: nowMs + randomBetween(-12, 12),
+      lifeMs: randomBetween(profile.lifeMin, profile.lifeMax),
+      x: mouth.center.x + mouth.axisX.x * mouthSpanOffset + mouth.forward.x * originForward,
+      y: mouth.center.y + mouth.axisX.y * mouthSpanOffset + mouth.forward.y * originForward,
+      vx: direction.x * speed + mouth.normal.x * sideKick + advection.x,
+      vy: direction.y * speed + mouth.normal.y * sideKick + advection.y,
+      gravity: profile.gravity,
+      drag: profile.drag,
+      size: randomBetween(profile.sizeMin, profile.sizeMax),
+      growth: profile.growth,
+      opacity: randomBetween(profile.opacityMin, profile.opacityMax),
+      fadePower: profile.fadePower,
+      trail: profile.trail,
+      additive: profile.additive,
+      normalX: mouth.normal.x,
+      normalY: mouth.normal.y,
+      wobble: randomBetween(-1, 1),
+      turbulence,
+      spin: randomBetween(-2.4, 2.4),
+      aspect: aspectBase,
+      thermal: randomBetween(0.75, 1.28),
+      color: profile.colors[Math.floor(Math.random() * profile.colors.length)]
+    });
+  }
+
+  if (mouthParticles.length > 560) {
+    mouthParticles.splice(0, mouthParticles.length - 560);
+  }
+}
+
+function maybeSpawnSonicWave(mouth, openness, mouthState, nowMs) {
+  if (openness <= 0) {
+    return;
+  }
+
+  const impulse = clamp(
+    openness * 0.72 + Math.max(0, mouthState.openVelocity) * 0.05,
+    0,
+    1.4
+  );
+  const cooldownMs = 240 - impulse * 125;
+  if (nowMs - lastMouthWaveMs < cooldownMs) {
+    return;
+  }
+
+  lastMouthWaveMs = nowMs;
+  mouthWaves.push({
+    bornAt: nowMs,
+    lifeMs: 560 + impulse * 320,
+    x: mouth.center.x + mouth.forward.x * mouth.width * (0.1 + impulse * 0.08),
+    y: mouth.center.y + mouth.forward.y * mouth.width * (0.1 + impulse * 0.08),
+    dirX: mouth.forward.x,
+    dirY: mouth.forward.y,
+    normalX: mouth.normal.x,
+    normalY: mouth.normal.y,
+    width: mouth.width,
+    intensity: impulse
+  });
+
+  if (mouthWaves.length > 28) {
+    mouthWaves.shift();
+  }
+}
+
+function drawMouthJetCone(mouth, profile, effect, openness, nowMs) {
+  if (!mouth || !profile || openness <= 0) {
+    return;
+  }
+
+  const tones = getMouthEffectTones(effect);
+  const pulse = 1 + Math.sin(nowMs * 0.012) * 0.07;
+  const reach = mouth.width * (1.4 + openness * 5.8) * pulse;
+  const near = mouth.width * 0.2;
+  const far = mouth.width * (0.65 + openness * 2.15);
+  const startX = mouth.center.x + mouth.forward.x * mouth.width * 0.02;
+  const startY = mouth.center.y + mouth.forward.y * mouth.width * 0.02;
+  const endX = startX + mouth.forward.x * reach;
+  const endY = startY + mouth.forward.y * reach;
+  const jitter = Math.sin(nowMs * 0.009 + openness * 5) * mouth.width * 0.08;
+
+  const leftNearX = startX + mouth.normal.x * near;
+  const leftNearY = startY + mouth.normal.y * near;
+  const rightNearX = startX - mouth.normal.x * near;
+  const rightNearY = startY - mouth.normal.y * near;
+  const leftFarX = endX + mouth.normal.x * far + mouth.normal.x * jitter;
+  const leftFarY = endY + mouth.normal.y * far + mouth.normal.y * jitter;
+  const rightFarX = endX - mouth.normal.x * far - mouth.normal.x * jitter;
+  const rightFarY = endY - mouth.normal.y * far - mouth.normal.y * jitter;
+
+  const centerNearX = startX + mouth.forward.x * mouth.width * 0.12;
+  const centerNearY = startY + mouth.forward.y * mouth.width * 0.12;
+  const centerFarX = endX + mouth.normal.x * jitter * 0.35;
+  const centerFarY = endY + mouth.normal.y * jitter * 0.35;
+
+  const cone = ctx.createLinearGradient(startX, startY, endX, endY);
+  cone.addColorStop(0, `rgba(${tones.core}, ${0.25 * openness})`);
+  cone.addColorStop(0.28, `rgba(${profile.hazeTone}, ${0.22 * openness})`);
+  cone.addColorStop(0.74, `rgba(${tones.plume}, ${0.12 * openness})`);
+  cone.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+  ctx.save();
+  ctx.fillStyle = cone;
+  ctx.beginPath();
+  ctx.moveTo(leftNearX, leftNearY);
+  ctx.quadraticCurveTo(
+    centerNearX + mouth.normal.x * mouth.width * 0.55,
+    centerNearY + mouth.normal.y * mouth.width * 0.55,
+    leftFarX,
+    leftFarY
+  );
+  ctx.quadraticCurveTo(centerFarX, centerFarY, rightFarX, rightFarY);
+  ctx.quadraticCurveTo(
+    centerNearX - mouth.normal.x * mouth.width * 0.55,
+    centerNearY - mouth.normal.y * mouth.width * 0.55,
+    rightNearX,
+    rightNearY
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = `rgba(${tones.core}, ${0.22 * openness})`;
+  ctx.lineWidth = Math.max(1, mouth.width * 0.07);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(centerNearX, centerNearY);
+  ctx.lineTo(centerFarX, centerFarY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMouthAperture(mouth, effect, openness, nowMs) {
+  if (!mouth || openness <= 0) {
+    return;
+  }
+
+  const tones = getMouthEffectTones(effect);
+  const pulse = 1 + Math.sin(nowMs * 0.015) * 0.06;
+  const rx = mouth.width * (0.26 + openness * 0.12);
+  const ry = mouth.width * (0.08 + openness * 0.22);
+  const angle = Math.atan2(mouth.axisX.y, mouth.axisX.x);
+
+  ctx.save();
+  ctx.translate(mouth.center.x, mouth.center.y);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = `rgba(8, 10, 16, ${0.5 + openness * 0.2})`;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const rim = ctx.createRadialGradient(0, 0, Math.max(1, rx * 0.18), 0, 0, rx * 1.1);
+  rim.addColorStop(0, `rgba(${tones.core}, ${0.26 * openness * pulse})`);
+  rim.addColorStop(0.45, `rgba(${tones.rim}, ${0.2 * openness})`);
+  rim.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = rim;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 1.16, ry * 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMouthVolumetricHaze(mouth, effect, openness, nowMs) {
+  if (!mouth || openness <= 0) {
+    return;
+  }
+
+  const tones = getMouthEffectTones(effect);
+  const steps = effect === "smoke" || effect === "toxic" ? 9 : 7;
+
+  ctx.save();
+  ctx.globalCompositeOperation =
+    effect === "smoke" || effect === "toxic" ? "source-over" : "screen";
+
+  for (let i = 0; i < steps; i += 1) {
+    const t = i / (steps - 1 || 1);
+    const reach = mouth.width * (0.25 + t * (0.9 + openness * 2.5));
+    const swirl = Math.sin(nowMs * 0.007 + i * 0.9) * mouth.width * (0.08 + t * 0.24);
+    const px = mouth.center.x + mouth.forward.x * reach + mouth.normal.x * swirl;
+    const py = mouth.center.y + mouth.forward.y * reach + mouth.normal.y * swirl;
+    const radius = mouth.width * (0.18 + t * (0.42 + openness * 0.9));
+    const alpha = Math.pow(1 - t, 1.2) * (effect === "smoke" ? 0.16 : 0.24) * openness;
+
+    const haze = ctx.createRadialGradient(px, py, radius * 0.08, px, py, radius);
+    haze.addColorStop(0, `rgba(${tones.core}, ${alpha * 0.85})`);
+    haze.addColorStop(0.45, `rgba(${tones.plume}, ${alpha * 0.56})`);
+    haze.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = haze;
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawMouthWaves(nowMs) {
+  for (let i = mouthWaves.length - 1; i >= 0; i -= 1) {
+    const wave = mouthWaves[i];
+    const elapsed = nowMs - wave.bornAt;
+    const progress = elapsed / wave.lifeMs;
+
+    if (progress >= 1) {
+      mouthWaves.splice(i, 1);
+      continue;
+    }
+
+    const alpha = Math.pow(1 - progress, 1.32) * (0.32 + wave.intensity * 0.45);
+    const move = wave.width * (0.45 + progress * 2.05);
+    const cx = wave.x + wave.dirX * move;
+    const cy = wave.y + wave.dirY * move;
+    const rx = wave.width * (0.44 + progress * 2.95);
+    const ry = rx * (0.34 + progress * 0.24);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.atan2(wave.dirY, wave.dirX));
+
+    const pressure = ctx.createRadialGradient(0, 0, rx * 0.1, 0, 0, rx * 1.05);
+    pressure.addColorStop(0, "rgba(255, 255, 255, 0)");
+    pressure.addColorStop(0.62, `rgba(212, 229, 255, ${alpha * 0.35})`);
+    pressure.addColorStop(1, "rgba(195, 213, 236, 0)");
+    ctx.fillStyle = pressure;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(233, 242, 255, ${alpha})`;
+    ctx.lineWidth = Math.max(0.9, (1 - progress) * 3.4);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(190, 208, 234, ${alpha * 0.58})`;
+    ctx.lineWidth = Math.max(0.75, (1 - progress) * 1.9);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx * 0.74, ry * 0.74, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawMouthParticles(nowMs) {
+  for (let i = mouthParticles.length - 1; i >= 0; i -= 1) {
+    const particle = mouthParticles[i];
+    const elapsedMs = nowMs - particle.bornAt;
+    if (elapsedMs <= 0) {
+      continue;
+    }
+
+    const progress = elapsedMs / particle.lifeMs;
+    if (progress >= 1) {
+      mouthParticles.splice(i, 1);
+      continue;
+    }
+
+    const t = elapsedMs / 1000;
+    const dragFactor = Math.exp(-particle.drag * t);
+    const wobblePhase = progress * 13.5 + particle.wobble * 4.6;
+    const drift =
+      Math.sin(wobblePhase) * particle.turbulence * particle.size * (1.4 + progress * 2.8);
+    const x =
+      particle.x +
+      particle.vx * t * dragFactor +
+      particle.normalX * drift * progress +
+      particle.normalY * drift * 0.08;
+    const y =
+      particle.y +
+      particle.vy * t * dragFactor +
+      0.5 * particle.gravity * t * t +
+      particle.normalY * drift * progress;
+    const alpha =
+      Math.pow(1 - progress, particle.fadePower) *
+      particle.opacity *
+      (0.8 + particle.thermal * 0.24);
+    if (alpha <= 0.01) {
+      continue;
+    }
+
+    const localVx = particle.vx * dragFactor;
+    const localVy = particle.vy * dragFactor + particle.gravity * t * 0.2;
+    const localSpeed = Math.hypot(localVx, localVy);
+    const size = particle.size * (1 + progress * particle.growth);
+    const stretch =
+      (1 + clamp(localSpeed * 0.0012, 0, 1.7) * (1 - progress)) * particle.aspect;
+    const rotation = Math.atan2(localVy, localVx) + particle.spin * progress * 0.35;
+    const trailLength = particle.trail * (1 - progress) * 0.07;
+    const tx = x - particle.vx * trailLength;
+    const ty = y - particle.vy * trailLength;
+
+    ctx.save();
+    ctx.globalCompositeOperation = particle.additive ? "lighter" : "source-over";
+    ctx.shadowBlur = particle.additive ? size * 2.8 : size * 1.8;
+    ctx.shadowColor = `rgba(${particle.color}, ${alpha * (particle.additive ? 1.05 : 0.82)})`;
+    if (particle.trail > 0) {
+      const trail = ctx.createLinearGradient(tx, ty, x, y);
+      trail.addColorStop(0, `rgba(${particle.color}, 0)`);
+      trail.addColorStop(1, `rgba(${particle.color}, ${alpha * 0.9})`);
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = Math.max(0.7, size * 0.18);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    const rx = Math.max(0.65, size * 0.34 * stretch);
+    const ry = Math.max(0.6, size * 0.3 / Math.max(0.55, stretch * 0.68));
+    const core = ctx.createRadialGradient(0, 0, Math.max(0.2, ry * 0.1), 0, 0, rx);
+    core.addColorStop(0, `rgba(255, 255, 255, ${alpha * (particle.additive ? 0.3 : 0.16)})`);
+    core.addColorStop(0.38, `rgba(${particle.color}, ${alpha * 0.9})`);
+    core.addColorStop(1, `rgba(${particle.color}, 0)`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawMouthEffects(nowMs) {
+  const effect = mouthSelect?.value || "none";
+  const frameMs = lastMouthEmitMs ? Math.min(90, Math.max(8, nowMs - lastMouthEmitMs)) : 16;
+  lastMouthEmitMs = nowMs;
+  const faceLandmarks = latestFaceResult?.faceLandmarks?.[0];
+  const mouth = faceLandmarks ? getMouthData(faceLandmarks) : null;
+  const mouthState = updateMouthDynamics(mouth, nowMs);
+
+  if (effect !== "none" && mouth) {
+    const profile = mouthEffectProfiles[effect];
+    const smoothedMouth = {
+      ...mouth,
+      openRatio: mouthState.openRatio
+    };
+    const openness = getMouthOpenIntensity(smoothedMouth, profile);
+
+    if (profile && openness > 0) {
+      drawMouthAperture(mouth, effect, openness, nowMs);
+      drawMouthJetCone(mouth, profile, effect, openness, nowMs);
+      drawMouthVolumetricHaze(mouth, effect, openness, nowMs);
+      emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs, frameMs);
+      if (effect === "sonic") {
+        maybeSpawnSonicWave(mouth, openness, mouthState, nowMs);
+      }
+    }
+  } else {
+    mouthEmitCarry *= 0.78;
+  }
+
+  drawMouthWaves(nowMs);
+  drawMouthParticles(nowMs);
 }
 
 function drawMirroredVideo() {
@@ -1290,6 +1993,7 @@ function renderFrame(nowMs) {
     }
 
     drawEyeEffects(nowMs);
+    drawMouthEffects(nowMs);
     drawPunchEffects(nowMs);
   }
 
