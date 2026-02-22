@@ -36,6 +36,36 @@ const mouthWaves = [];
 const detectIntervalMs = 34;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const randomBetween = (min, max) => Math.random() * (max - min) + min;
+const lerp = (a, b, t) => a + (b - a) * t;
+const mixRgb = (a, b, t) => [
+  Math.round(lerp(a[0], b[0], t)),
+  Math.round(lerp(a[1], b[1], t)),
+  Math.round(lerp(a[2], b[2], t))
+];
+const rgba = (rgb, alpha) =>
+  `rgba(${clamp(Math.round(rgb[0]), 0, 255)}, ${clamp(
+    Math.round(rgb[1]),
+    0,
+    255
+  )}, ${clamp(Math.round(rgb[2]), 0, 255)}, ${alpha})`;
+const rgbToText = (rgb) =>
+  `${clamp(Math.round(rgb[0]), 0, 255)}, ${clamp(Math.round(rgb[1]), 0, 255)}, ${clamp(
+    Math.round(rgb[2]),
+    0,
+    255
+  )}`;
+const rgbFromText = (text) => {
+  const values = String(text)
+    .split(",")
+    .map((part) => Number.parseFloat(part.trim()))
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length < 3) {
+    return [255, 255, 255];
+  }
+
+  return [values[0], values[1], values[2]];
+};
 let lastMouthEmitMs = 0;
 let mouthEmitCarry = 0;
 let lastMouthWaveMs = 0;
@@ -189,6 +219,54 @@ const mouthEffectProfiles = {
     additive: false,
     hazeTone: "225,238,255",
     colors: ["238,246,255", "196,215,236", "157,176,198", "131,146,166"]
+  },
+  sludge: {
+    openThreshold: 0.045,
+    fullOpen: 0.19,
+    rateBase: 13,
+    rateScale: 42,
+    minSpeed: 85,
+    maxSpeed: 260,
+    gravity: 930,
+    drag: 1.95,
+    spread: 0.72,
+    sideKick: 76,
+    lifeMin: 520,
+    lifeMax: 1320,
+    sizeMin: 2.6,
+    sizeMax: 8.4,
+    growth: 2.6,
+    opacityMin: 0.16,
+    opacityMax: 0.42,
+    fadePower: 1.05,
+    trail: 0.08,
+    additive: false,
+    hazeTone: "158,164,95",
+    colors: ["208,214,159", "172,177,116", "133,141,89", "96,102,67"]
+  },
+  bubbles: {
+    openThreshold: 0.038,
+    fullOpen: 0.18,
+    rateBase: 9,
+    rateScale: 24,
+    minSpeed: 85,
+    maxSpeed: 260,
+    gravity: -230,
+    drag: 0.85,
+    spread: 1.08,
+    sideKick: 84,
+    lifeMin: 680,
+    lifeMax: 1680,
+    sizeMin: 2.4,
+    sizeMax: 8.2,
+    growth: 2.1,
+    opacityMin: 0.12,
+    opacityMax: 0.36,
+    fadePower: 1.08,
+    trail: 0,
+    additive: false,
+    hazeTone: "168,224,238",
+    colors: ["228,250,255", "186,228,242", "144,198,219", "110,162,188"]
   }
 };
 
@@ -449,10 +527,115 @@ function getMouthEffectTones(effect) {
       plume: "140, 150, 164"
     };
   }
+  if (effect === "sludge") {
+    return {
+      rim: "166, 172, 104",
+      core: "214, 220, 167",
+      plume: "110, 116, 76"
+    };
+  }
+  if (effect === "bubbles") {
+    return {
+      rim: "167, 219, 240",
+      core: "232, 252, 255",
+      plume: "120, 179, 204"
+    };
+  }
   return {
     rim: "213, 226, 246",
     core: "239, 247, 255",
     plume: "172, 191, 214"
+  };
+}
+
+function getMouthEffectMaterial(effect) {
+  if (effect === "fire") {
+    return {
+      hot: [255, 250, 228],
+      warm: [255, 156, 78],
+      cool: [184, 64, 28],
+      cooling: 1.14,
+      buoyancy: -120,
+      shimmer: 0.2
+    };
+  }
+  if (effect === "plasma") {
+    return {
+      hot: [236, 255, 255],
+      warm: [144, 227, 255],
+      cool: [70, 128, 255],
+      cooling: 0.95,
+      buoyancy: -70,
+      shimmer: 0.26
+    };
+  }
+  if (effect === "frost") {
+    return {
+      hot: [246, 255, 255],
+      warm: [192, 229, 252],
+      cool: [136, 174, 214],
+      cooling: 1.5,
+      buoyancy: -16,
+      shimmer: 0.12
+    };
+  }
+  if (effect === "toxic") {
+    return {
+      hot: [236, 255, 198],
+      warm: [168, 228, 120],
+      cool: [88, 142, 71],
+      cooling: 1.2,
+      buoyancy: -45,
+      shimmer: 0.08
+    };
+  }
+  if (effect === "smoke") {
+    return {
+      hot: [220, 226, 234],
+      warm: [150, 160, 173],
+      cool: [91, 102, 118],
+      cooling: 0.84,
+      buoyancy: -180,
+      shimmer: 0
+    };
+  }
+  if (effect === "sludge") {
+    return {
+      hot: [212, 220, 168],
+      warm: [157, 166, 104],
+      cool: [86, 94, 63],
+      cooling: 0.72,
+      buoyancy: 160,
+      shimmer: 0.03
+    };
+  }
+  if (effect === "bubbles") {
+    return {
+      hot: [236, 253, 255],
+      warm: [180, 222, 242],
+      cool: [115, 166, 196],
+      cooling: 1.05,
+      buoyancy: -280,
+      shimmer: 0.11
+    };
+  }
+  if (effect === "sonic") {
+    return {
+      hot: [241, 248, 255],
+      warm: [189, 209, 235],
+      cool: [126, 145, 170],
+      cooling: 1.22,
+      buoyancy: -90,
+      shimmer: 0.04
+    };
+  }
+  return {
+    hot: [240, 247, 255],
+    warm: [182, 206, 236],
+    cool: [122, 146, 177],
+    cooling: 1,
+    buoyancy: -70,
+    shimmer: 0.08
   };
 }
 
@@ -507,6 +690,7 @@ function emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs,
     return;
   }
 
+  const material = getMouthEffectMaterial(effect);
   const burstBoost = clamp(Math.max(0, mouthState.openVelocity) * 0.045, 0, 1);
   const rate = profile.rateBase + profile.rateScale * openness * (1 + burstBoost);
   mouthEmitCarry += (frameMs / 1000) * rate;
@@ -517,6 +701,7 @@ function emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs,
   }
 
   mouthEmitCarry -= emitCount;
+  const forwardImpulse = clamp(Math.max(0, mouthState.openVelocity) * 0.015, 0, 2.8);
   const advection = {
     x: mouthState.centerVelocity.x * 0.1,
     y: mouthState.centerVelocity.y * 0.1
@@ -537,15 +722,27 @@ function emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs,
       effect === "smoke" || effect === "toxic"
         ? randomBetween(0.95, 2.15)
         : randomBetween(0.58, 1.6);
+    const baseColor = rgbFromText(
+      profile.colors[Math.floor(Math.random() * profile.colors.length)]
+    );
+    const heat = randomBetween(0.72, 1.22) * (0.7 + openness * 0.6);
 
     mouthParticles.push({
       bornAt: nowMs + randomBetween(-12, 12),
       lifeMs: randomBetween(profile.lifeMin, profile.lifeMax),
       x: mouth.center.x + mouth.axisX.x * mouthSpanOffset + mouth.forward.x * originForward,
       y: mouth.center.y + mouth.axisX.y * mouthSpanOffset + mouth.forward.y * originForward,
-      vx: direction.x * speed + mouth.normal.x * sideKick + advection.x,
-      vy: direction.y * speed + mouth.normal.y * sideKick + advection.y,
-      gravity: profile.gravity,
+      vx:
+        direction.x * speed +
+        mouth.normal.x * sideKick +
+        mouth.forward.x * speed * 0.08 * forwardImpulse +
+        advection.x,
+      vy:
+        direction.y * speed +
+        mouth.normal.y * sideKick +
+        mouth.forward.y * speed * 0.08 * forwardImpulse +
+        advection.y,
+      gravity: profile.gravity + material.buoyancy * (0.3 + openness * 0.7),
       drag: profile.drag,
       size: randomBetween(profile.sizeMin, profile.sizeMax),
       growth: profile.growth,
@@ -560,7 +757,11 @@ function emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs,
       spin: randomBetween(-2.4, 2.4),
       aspect: aspectBase,
       thermal: randomBetween(0.75, 1.28),
-      color: profile.colors[Math.floor(Math.random() * profile.colors.length)]
+      effect,
+      baseColor,
+      heat,
+      cooling: material.cooling,
+      shimmer: material.shimmer
     });
   }
 
@@ -603,40 +804,49 @@ function maybeSpawnSonicWave(mouth, openness, mouthState, nowMs) {
   }
 }
 
-function drawMouthJetCone(mouth, profile, effect, openness, nowMs) {
+function drawMouthJetCone(mouth, profile, effect, openness, mouthState, nowMs) {
   if (!mouth || !profile || openness <= 0) {
     return;
   }
 
   const tones = getMouthEffectTones(effect);
+  const flowDir = normalizeVector(
+    mouth.forward.x + mouthState.centerVelocity.x * 0.0012,
+    mouth.forward.y + mouthState.centerVelocity.y * 0.0012
+  );
+  const flowNormal = {
+    x: -flowDir.y,
+    y: flowDir.x
+  };
   const pulse = 1 + Math.sin(nowMs * 0.012) * 0.07;
-  const reach = mouth.width * (1.4 + openness * 5.8) * pulse;
+  const pressure = clamp(openness + Math.max(0, mouthState.openVelocity) * 0.01, 0, 1.35);
+  const reach = mouth.width * (1.2 + pressure * 6.4) * pulse;
   const near = mouth.width * 0.2;
-  const far = mouth.width * (0.65 + openness * 2.15);
-  const startX = mouth.center.x + mouth.forward.x * mouth.width * 0.02;
-  const startY = mouth.center.y + mouth.forward.y * mouth.width * 0.02;
-  const endX = startX + mouth.forward.x * reach;
-  const endY = startY + mouth.forward.y * reach;
-  const jitter = Math.sin(nowMs * 0.009 + openness * 5) * mouth.width * 0.08;
+  const far = mouth.width * (0.62 + pressure * 2.2);
+  const startX = mouth.center.x + flowDir.x * mouth.width * 0.02;
+  const startY = mouth.center.y + flowDir.y * mouth.width * 0.02;
+  const endX = startX + flowDir.x * reach;
+  const endY = startY + flowDir.y * reach;
+  const jitter = Math.sin(nowMs * 0.009 + pressure * 5) * mouth.width * 0.08;
 
-  const leftNearX = startX + mouth.normal.x * near;
-  const leftNearY = startY + mouth.normal.y * near;
-  const rightNearX = startX - mouth.normal.x * near;
-  const rightNearY = startY - mouth.normal.y * near;
-  const leftFarX = endX + mouth.normal.x * far + mouth.normal.x * jitter;
-  const leftFarY = endY + mouth.normal.y * far + mouth.normal.y * jitter;
-  const rightFarX = endX - mouth.normal.x * far - mouth.normal.x * jitter;
-  const rightFarY = endY - mouth.normal.y * far - mouth.normal.y * jitter;
+  const leftNearX = startX + flowNormal.x * near;
+  const leftNearY = startY + flowNormal.y * near;
+  const rightNearX = startX - flowNormal.x * near;
+  const rightNearY = startY - flowNormal.y * near;
+  const leftFarX = endX + flowNormal.x * far + flowNormal.x * jitter;
+  const leftFarY = endY + flowNormal.y * far + flowNormal.y * jitter;
+  const rightFarX = endX - flowNormal.x * far - flowNormal.x * jitter;
+  const rightFarY = endY - flowNormal.y * far - flowNormal.y * jitter;
 
-  const centerNearX = startX + mouth.forward.x * mouth.width * 0.12;
-  const centerNearY = startY + mouth.forward.y * mouth.width * 0.12;
-  const centerFarX = endX + mouth.normal.x * jitter * 0.35;
-  const centerFarY = endY + mouth.normal.y * jitter * 0.35;
+  const centerNearX = startX + flowDir.x * mouth.width * 0.12;
+  const centerNearY = startY + flowDir.y * mouth.width * 0.12;
+  const centerFarX = endX + flowNormal.x * jitter * 0.35;
+  const centerFarY = endY + flowNormal.y * jitter * 0.35;
 
   const cone = ctx.createLinearGradient(startX, startY, endX, endY);
-  cone.addColorStop(0, `rgba(${tones.core}, ${0.25 * openness})`);
-  cone.addColorStop(0.28, `rgba(${profile.hazeTone}, ${0.22 * openness})`);
-  cone.addColorStop(0.74, `rgba(${tones.plume}, ${0.12 * openness})`);
+  cone.addColorStop(0, `rgba(${tones.core}, ${0.24 * pressure})`);
+  cone.addColorStop(0.24, `rgba(${profile.hazeTone}, ${0.23 * pressure})`);
+  cone.addColorStop(0.72, `rgba(${tones.plume}, ${0.13 * pressure})`);
   cone.addColorStop(1, "rgba(0, 0, 0, 0)");
 
   ctx.save();
@@ -644,15 +854,15 @@ function drawMouthJetCone(mouth, profile, effect, openness, nowMs) {
   ctx.beginPath();
   ctx.moveTo(leftNearX, leftNearY);
   ctx.quadraticCurveTo(
-    centerNearX + mouth.normal.x * mouth.width * 0.55,
-    centerNearY + mouth.normal.y * mouth.width * 0.55,
+    centerNearX + flowNormal.x * mouth.width * 0.55,
+    centerNearY + flowNormal.y * mouth.width * 0.55,
     leftFarX,
     leftFarY
   );
   ctx.quadraticCurveTo(centerFarX, centerFarY, rightFarX, rightFarY);
   ctx.quadraticCurveTo(
-    centerNearX - mouth.normal.x * mouth.width * 0.55,
-    centerNearY - mouth.normal.y * mouth.width * 0.55,
+    centerNearX - flowNormal.x * mouth.width * 0.55,
+    centerNearY - flowNormal.y * mouth.width * 0.55,
     rightNearX,
     rightNearY
   );
@@ -660,7 +870,7 @@ function drawMouthJetCone(mouth, profile, effect, openness, nowMs) {
   ctx.fill();
 
   ctx.globalCompositeOperation = "lighter";
-  ctx.strokeStyle = `rgba(${tones.core}, ${0.22 * openness})`;
+  ctx.strokeStyle = `rgba(${tones.core}, ${0.2 * pressure})`;
   ctx.lineWidth = Math.max(1, mouth.width * 0.07);
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -701,12 +911,21 @@ function drawMouthAperture(mouth, effect, openness, nowMs) {
   ctx.restore();
 }
 
-function drawMouthVolumetricHaze(mouth, effect, openness, nowMs) {
+function drawMouthVolumetricHaze(mouth, effect, openness, mouthState, nowMs) {
   if (!mouth || openness <= 0) {
     return;
   }
 
   const tones = getMouthEffectTones(effect);
+  const material = getMouthEffectMaterial(effect);
+  const flowDir = normalizeVector(
+    mouth.forward.x + mouthState.centerVelocity.x * 0.0012,
+    mouth.forward.y + mouthState.centerVelocity.y * 0.0012
+  );
+  const flowNormal = {
+    x: -flowDir.y,
+    y: flowDir.x
+  };
   const steps = effect === "smoke" || effect === "toxic" ? 9 : 7;
 
   ctx.save();
@@ -715,10 +934,17 @@ function drawMouthVolumetricHaze(mouth, effect, openness, nowMs) {
 
   for (let i = 0; i < steps; i += 1) {
     const t = i / (steps - 1 || 1);
-    const reach = mouth.width * (0.25 + t * (0.9 + openness * 2.5));
-    const swirl = Math.sin(nowMs * 0.007 + i * 0.9) * mouth.width * (0.08 + t * 0.24);
-    const px = mouth.center.x + mouth.forward.x * reach + mouth.normal.x * swirl;
-    const py = mouth.center.y + mouth.forward.y * reach + mouth.normal.y * swirl;
+    const reach = mouth.width * (0.2 + t * (1 + openness * 2.7));
+    const swirl =
+      Math.sin(nowMs * (0.0065 + material.shimmer * 0.01) + i * 0.95) *
+      mouth.width *
+      (0.07 + t * 0.26);
+    const advection = {
+      x: mouthState.centerVelocity.x * 0.02 * (0.3 + t),
+      y: mouthState.centerVelocity.y * 0.02 * (0.3 + t)
+    };
+    const px = mouth.center.x + flowDir.x * reach + flowNormal.x * swirl + advection.x;
+    const py = mouth.center.y + flowDir.y * reach + flowNormal.y * swirl + advection.y;
     const radius = mouth.width * (0.18 + t * (0.42 + openness * 0.9));
     const alpha = Math.pow(1 - t, 1.2) * (effect === "smoke" ? 0.16 : 0.24) * openness;
 
@@ -732,6 +958,208 @@ function drawMouthVolumetricHaze(mouth, effect, openness, nowMs) {
     ctx.fill();
   }
 
+  ctx.restore();
+}
+
+function drawMouthFlowFilaments(mouth, effect, openness, mouthState, nowMs) {
+  if (!mouth || openness <= 0 || (effect !== "fire" && effect !== "plasma" && effect !== "frost")) {
+    return;
+  }
+
+  const material = getMouthEffectMaterial(effect);
+  const flowDir = normalizeVector(
+    mouth.forward.x + mouthState.centerVelocity.x * 0.0013,
+    mouth.forward.y + mouthState.centerVelocity.y * 0.0013
+  );
+  const flowNormal = {
+    x: -flowDir.y,
+    y: flowDir.x
+  };
+  const strands = effect === "frost" ? 4 : 5;
+  const reach = mouth.width * (1.1 + openness * 4.2);
+  const tone = rgbToText(mixRgb(material.warm, material.hot, 0.55));
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+
+  for (let strand = 0; strand < strands; strand += 1) {
+    const strandOffset = ((strand / (strands - 1 || 1)) - 0.5) * mouth.width * 0.34;
+    ctx.beginPath();
+
+    for (let i = 0; i <= 9; i += 1) {
+      const t = i / 9;
+      const flow = reach * t;
+      const twist =
+        Math.sin(nowMs * 0.01 + strand * 0.9 + i * 0.7) *
+        mouth.width *
+        (0.02 + material.shimmer * 0.4 + t * 0.18);
+      const x =
+        mouth.center.x +
+        flowDir.x * flow +
+        flowNormal.x * (strandOffset + twist) +
+        mouthState.centerVelocity.x * 0.009 * t;
+      const y =
+        mouth.center.y +
+        flowDir.y * flow +
+        flowNormal.y * (strandOffset + twist) +
+        mouthState.centerVelocity.y * 0.009 * t;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    const alpha = (0.12 + openness * 0.22) * (1 - strand / Math.max(1, strands * 1.6));
+    ctx.strokeStyle = `rgba(${tone}, ${alpha})`;
+    ctx.lineWidth = Math.max(0.9, mouth.width * (0.018 + (1 - strand / strands) * 0.01));
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawMouthSludgeDrips(mouth, openness, nowMs) {
+  if (!mouth || openness <= 0) {
+    return;
+  }
+
+  const dripCount = 6;
+  const angle = Math.atan2(mouth.axisX.y, mouth.axisX.x);
+
+  ctx.save();
+  ctx.translate(mouth.center.x, mouth.center.y + mouth.width * 0.09);
+  ctx.rotate(angle);
+
+  for (let i = 0; i < dripCount; i += 1) {
+    const t = i / (dripCount - 1 || 1);
+    const offsetX = (t - 0.5) * mouth.width * 0.62;
+    const swing = Math.sin(nowMs * 0.004 + i * 0.9) * mouth.width * 0.035;
+    const length =
+      mouth.width * (0.08 + openness * 0.28 + (i % 3) * 0.04) *
+      (0.9 + Math.sin(nowMs * 0.003 + i * 1.4) * 0.14);
+    const width = mouth.width * (0.018 + (i % 2) * 0.008);
+
+    const thread = ctx.createLinearGradient(offsetX, 0, offsetX + swing, length);
+    thread.addColorStop(0, "rgba(201, 208, 145, 0.42)");
+    thread.addColorStop(0.62, "rgba(139, 149, 94, 0.28)");
+    thread.addColorStop(1, "rgba(110, 117, 78, 0)");
+    ctx.strokeStyle = thread;
+    ctx.lineWidth = Math.max(0.8, width * 2.2);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(offsetX, 0);
+    ctx.quadraticCurveTo(offsetX + swing * 0.6, length * 0.4, offsetX + swing, length);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(168, 176, 114, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(offsetX + swing, length, width * 1.6, width * 1.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawMouthBubbleFoam(mouth, openness, mouthState, nowMs) {
+  if (!mouth || openness <= 0) {
+    return;
+  }
+
+  const flowDir = normalizeVector(
+    mouth.forward.x + mouthState.centerVelocity.x * 0.0016,
+    mouth.forward.y + mouthState.centerVelocity.y * 0.0016
+  );
+  const flowNormal = {
+    x: -flowDir.y,
+    y: flowDir.x
+  };
+  const bubbleCount = 8;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+
+  for (let i = 0; i < bubbleCount; i += 1) {
+    const t = i / (bubbleCount - 1 || 1);
+    const lift = mouth.width * (0.08 + t * (0.9 + openness * 2.4));
+    const drift =
+      Math.sin(nowMs * 0.004 + i * 0.9) * mouth.width * (0.07 + t * 0.24);
+    const wobble = Math.cos(nowMs * 0.005 + i * 1.7) * mouth.width * 0.04;
+    const x =
+      mouth.center.x +
+      flowDir.x * lift +
+      flowNormal.x * drift +
+      mouthState.centerVelocity.x * 0.006 * t;
+    const y =
+      mouth.center.y +
+      flowDir.y * lift +
+      flowNormal.y * drift +
+      wobble +
+      mouthState.centerVelocity.y * 0.006 * t;
+    const radius = mouth.width * (0.05 + (1 - t) * 0.05 + openness * 0.04);
+    const alpha = (0.12 + openness * 0.2) * (1 - t * 0.55);
+
+    const shell = ctx.createRadialGradient(
+      x - radius * 0.25,
+      y - radius * 0.25,
+      radius * 0.05,
+      x,
+      y,
+      radius
+    );
+    shell.addColorStop(0, `rgba(240, 253, 255, ${alpha * 0.9})`);
+    shell.addColorStop(0.55, `rgba(165, 219, 242, ${alpha * 0.4})`);
+    shell.addColorStop(1, "rgba(106, 168, 196, 0)");
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(188, 232, 248, ${alpha * 0.65})`;
+    ctx.lineWidth = Math.max(0.8, radius * 0.11);
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 0.92, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(x - radius * 0.28, y - radius * 0.3, radius * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawMouthOcclusionMask(mouth, openness, nowMs) {
+  if (!mouth || openness <= 0) {
+    return;
+  }
+
+  const rx = mouth.width * (0.25 + openness * 0.12);
+  const ry = mouth.width * (0.08 + openness * 0.2);
+  const angle = Math.atan2(mouth.axisX.y, mouth.axisX.x);
+  const pulse = 1 + Math.sin(nowMs * 0.013) * 0.04;
+
+  ctx.save();
+  ctx.translate(mouth.center.x, mouth.center.y);
+  ctx.rotate(angle);
+
+  const inner = ctx.createRadialGradient(0, 0, rx * 0.1, 0, 0, rx * 1.15);
+  inner.addColorStop(0, `rgba(10, 12, 18, ${0.32 + openness * 0.18})`);
+  inner.addColorStop(0.55, `rgba(8, 9, 14, ${0.2 + openness * 0.12})`);
+  inner.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = inner;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 1.15, ry * 1.26, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(245, 208, 188, ${0.08 + openness * 0.06})`;
+  ctx.lineWidth = Math.max(0.9, mouth.width * 0.013 * pulse);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 0.98, ry * 0.95, 0, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -828,15 +1256,23 @@ function drawMouthParticles(nowMs) {
     const trailLength = particle.trail * (1 - progress) * 0.07;
     const tx = x - particle.vx * trailLength;
     const ty = y - particle.vy * trailLength;
+    const material = getMouthEffectMaterial(particle.effect);
+    const heat = clamp(particle.heat - progress * particle.cooling * particle.thermal, 0, 1.25);
+    const heated = mixRgb(material.warm, material.hot, clamp(Math.pow(heat, 0.72), 0, 1));
+    const cooled = mixRgb(material.cool, particle.baseColor, clamp(1 - heat * 0.8, 0, 1));
+    const bodyRgb = mixRgb(cooled, heated, 0.68);
+    const edgeRgb = mixRgb(material.hot, bodyRgb, 0.34);
+    const bodyAlpha = alpha * (0.76 + heat * 0.2);
+    const edgeAlpha = alpha * (0.58 + heat * 0.26);
 
     ctx.save();
     ctx.globalCompositeOperation = particle.additive ? "lighter" : "source-over";
     ctx.shadowBlur = particle.additive ? size * 2.8 : size * 1.8;
-    ctx.shadowColor = `rgba(${particle.color}, ${alpha * (particle.additive ? 1.05 : 0.82)})`;
+    ctx.shadowColor = rgba(bodyRgb, alpha * (particle.additive ? 1.05 : 0.82));
     if (particle.trail > 0) {
       const trail = ctx.createLinearGradient(tx, ty, x, y);
-      trail.addColorStop(0, `rgba(${particle.color}, 0)`);
-      trail.addColorStop(1, `rgba(${particle.color}, ${alpha * 0.9})`);
+      trail.addColorStop(0, rgba(bodyRgb, 0));
+      trail.addColorStop(1, rgba(bodyRgb, alpha * 0.9));
       ctx.strokeStyle = trail;
       ctx.lineWidth = Math.max(0.7, size * 0.18);
       ctx.lineCap = "round";
@@ -851,9 +1287,10 @@ function drawMouthParticles(nowMs) {
     const rx = Math.max(0.65, size * 0.34 * stretch);
     const ry = Math.max(0.6, size * 0.3 / Math.max(0.55, stretch * 0.68));
     const core = ctx.createRadialGradient(0, 0, Math.max(0.2, ry * 0.1), 0, 0, rx);
-    core.addColorStop(0, `rgba(255, 255, 255, ${alpha * (particle.additive ? 0.3 : 0.16)})`);
-    core.addColorStop(0.38, `rgba(${particle.color}, ${alpha * 0.9})`);
-    core.addColorStop(1, `rgba(${particle.color}, 0)`);
+    core.addColorStop(0, rgba(material.hot, alpha * (particle.additive ? 0.34 : 0.18)));
+    core.addColorStop(0.34, rgba(edgeRgb, edgeAlpha));
+    core.addColorStop(0.72, rgba(bodyRgb, bodyAlpha));
+    core.addColorStop(1, rgba(bodyRgb, 0));
     ctx.fillStyle = core;
     ctx.beginPath();
     ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -880,8 +1317,14 @@ function drawMouthEffects(nowMs) {
 
     if (profile && openness > 0) {
       drawMouthAperture(mouth, effect, openness, nowMs);
-      drawMouthJetCone(mouth, profile, effect, openness, nowMs);
-      drawMouthVolumetricHaze(mouth, effect, openness, nowMs);
+      drawMouthJetCone(mouth, profile, effect, openness, mouthState, nowMs);
+      drawMouthFlowFilaments(mouth, effect, openness, mouthState, nowMs);
+      drawMouthVolumetricHaze(mouth, effect, openness, mouthState, nowMs);
+      if (effect === "sludge") {
+        drawMouthSludgeDrips(mouth, openness, nowMs);
+      } else if (effect === "bubbles") {
+        drawMouthBubbleFoam(mouth, openness, mouthState, nowMs);
+      }
       emitMouthParticles(mouth, profile, effect, openness, mouthState, nowMs, frameMs);
       if (effect === "sonic") {
         maybeSpawnSonicWave(mouth, openness, mouthState, nowMs);
@@ -893,6 +1336,19 @@ function drawMouthEffects(nowMs) {
 
   drawMouthWaves(nowMs);
   drawMouthParticles(nowMs);
+  if (effect !== "none" && mouth) {
+    const profile = mouthEffectProfiles[effect];
+    const openness = getMouthOpenIntensity(
+      {
+        ...mouth,
+        openRatio: mouthState.openRatio
+      },
+      profile
+    );
+    if (openness > 0) {
+      drawMouthOcclusionMask(mouth, openness, nowMs);
+    }
+  }
 }
 
 function drawMirroredVideo() {
@@ -1051,6 +1507,48 @@ function createPunchParticles(type, intensity, direction) {
       lateral: 1.7,
       forwardPush: 22,
       colors: ["255,242,209", "255,176,90", "242,108,46", "170,59,26"]
+    },
+    muck: {
+      countBase: 24,
+      countScale: 14,
+      minSpeed: 140,
+      maxSpeed: 460,
+      gravity: 2500,
+      drag: 3.3,
+      lifeMin: 280,
+      lifeMax: 940,
+      sizeMin: 2.4,
+      sizeMax: 6.9,
+      streakMin: 0.15,
+      streakMax: 0.5,
+      opacityMin: 0.25,
+      opacityMax: 0.52,
+      cone: Math.PI * 0.55,
+      directionalChance: 0.88,
+      lateral: 2.1,
+      forwardPush: 38,
+      colors: ["201,206,152", "164,170,112", "128,133,90", "93,100,73"]
+    },
+    glitch: {
+      countBase: 26,
+      countScale: 18,
+      minSpeed: 420,
+      maxSpeed: 1020,
+      gravity: 540,
+      drag: 1.35,
+      lifeMin: 180,
+      lifeMax: 430,
+      sizeMin: 1.4,
+      sizeMax: 3.8,
+      streakMin: 0.3,
+      streakMax: 0.95,
+      opacityMin: 0.4,
+      opacityMax: 0.82,
+      cone: Math.PI * 0.62,
+      directionalChance: 0.86,
+      lateral: 2.6,
+      forwardPush: 44,
+      colors: ["255,94,196", "85,244,255", "254,245,102", "133,148,255"]
     }
   };
   const profile = profiles[type] || profiles.sparks;
@@ -1106,7 +1604,9 @@ function spawnPunchEffect(point, nowMs, speed, direction) {
     debris: 980,
     metal: 720,
     airblast: 620,
-    embertrail: 1080
+    embertrail: 1080,
+    muck: 1120,
+    glitch: 720
   };
 
   punchBursts.push({
@@ -1196,7 +1696,9 @@ function drawImpactFlash(effect, progress, alpha) {
     debris: ["255,228,190", "185,161,124", "97,83,62"],
     metal: ["255,253,240", "255,214,126", "255,96,38"],
     airblast: ["241,248,255", "189,214,238", "126,157,184"],
-    embertrail: ["255,247,223", "255,164,88", "191,64,27"]
+    embertrail: ["255,247,223", "255,164,88", "191,64,27"],
+    muck: ["224,229,175", "164,172,112", "106,113,77"],
+    glitch: ["248,238,255", "130,235,255", "255,96,194"]
   };
 
   const [innerTone, midTone, outerTone] = toneByType[effect.type] || toneByType.sparks;
@@ -1412,8 +1914,106 @@ function drawEmberWake(effect, progress, alpha, nowMs) {
   ctx.restore();
 }
 
+function drawMuckSplatter(effect, progress, alpha, nowMs) {
+  if (effect.type !== "muck") {
+    return;
+  }
+
+  const blobs = 11;
+  const spread = effect.coreRadius * (0.8 + progress * 3.1);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+
+  for (let i = 0; i < blobs; i += 1) {
+    const t = i / blobs;
+    const angle = effect.seed + t * Math.PI * 2 + Math.sin(nowMs * 0.004 + i) * 0.25;
+    const drift = spread * (0.25 + t * 0.95);
+    const x = effect.x + Math.cos(angle) * drift + effect.normalX * Math.sin(nowMs * 0.003 + i) * 5;
+    const y = effect.y + Math.sin(angle) * drift + effect.normalY * Math.cos(nowMs * 0.003 + i) * 5;
+    const radius = effect.coreRadius * (0.1 + (1 - progress) * 0.15 + (i % 3) * 0.02);
+    const blobAlpha = alpha * (0.3 + (i % 4) * 0.08);
+    const hueShift = i * 4;
+
+    ctx.fillStyle = `rgba(${140 + hueShift}, ${148 + hueShift}, ${95 + Math.floor(i / 2)}, ${blobAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius * 1.35, radius, Math.sin(i + effect.seed), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const puddle = ctx.createRadialGradient(
+    effect.x,
+    effect.y,
+    effect.coreRadius * 0.2,
+    effect.x,
+    effect.y,
+    effect.coreRadius * (1.2 + progress * 1.4)
+  );
+  puddle.addColorStop(0, `rgba(182, 188, 132, ${alpha * 0.34})`);
+  puddle.addColorStop(0.55, `rgba(132, 139, 90, ${alpha * 0.24})`);
+  puddle.addColorStop(1, "rgba(88, 94, 66, 0)");
+  ctx.fillStyle = puddle;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, effect.coreRadius * (1.2 + progress * 1.45), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawGlitchBurst(effect, progress, alpha, nowMs) {
+  if (effect.type !== "glitch") {
+    return;
+  }
+
+  const frames = [
+    `rgba(255, 84, 196, ${alpha * 0.34})`,
+    `rgba(88, 242, 255, ${alpha * 0.34})`,
+    `rgba(255, 244, 118, ${alpha * 0.34})`
+  ];
+  const span = effect.coreRadius * (0.9 + progress * 3.2);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (let i = 0; i < 12; i += 1) {
+    const sweep = effect.seed + i * 0.7 + nowMs * 0.002;
+    const drift = span * (0.25 + (i % 4) * 0.22);
+    const x =
+      effect.x +
+      Math.cos(sweep) * drift +
+      effect.normalX * Math.sin(nowMs * 0.014 + i) * 8;
+    const y =
+      effect.y +
+      Math.sin(sweep) * drift +
+      effect.normalY * Math.cos(nowMs * 0.011 + i) * 8;
+    const w = effect.coreRadius * (0.25 + (i % 3) * 0.21);
+    const h = effect.coreRadius * (0.08 + ((i + 1) % 2) * 0.13);
+    const skew = Math.sin(nowMs * 0.01 + i * 1.1) * 0.28;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(sweep * 0.22 + skew);
+    ctx.fillStyle = frames[i % frames.length];
+    ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
+    ctx.restore();
+  }
+
+  const scanHeight = Math.max(1, effect.coreRadius * (0.14 + (1 - progress) * 0.18));
+  for (let line = -2; line <= 2; line += 1) {
+    const y = effect.y + line * scanHeight * 1.2 + Math.sin(nowMs * 0.03 + line) * 3;
+    ctx.strokeStyle = `rgba(130, 238, 255, ${alpha * 0.24})`;
+    ctx.lineWidth = scanHeight;
+    ctx.beginPath();
+    ctx.moveTo(effect.x - span * 1.2, y);
+    ctx.lineTo(effect.x + span * 1.2, y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawPunchParticles(effect, elapsedMs, alphaScale) {
-  const additive = ["sparks", "plasma", "metal", "embertrail"].includes(effect.type);
+  const additive = ["sparks", "plasma", "metal", "embertrail", "glitch"].includes(effect.type);
 
   ctx.save();
   if (additive) {
@@ -1479,6 +2079,8 @@ function drawPunchEffects(nowMs) {
     drawAirBlastCone(effect, progress, alpha);
     drawMetalSheen(effect, progress, alpha);
     drawEmberWake(effect, progress, alpha, nowMs);
+    drawMuckSplatter(effect, progress, alpha, nowMs);
+    drawGlitchBurst(effect, progress, alpha, nowMs);
     drawPunchParticles(effect, elapsed, alpha);
   }
 }
@@ -1718,6 +2320,110 @@ function drawMoltenIrisEyes(eyes, eyeFrame, nowMs) {
   ctx.restore();
 }
 
+function drawIrritatedEyes(eyes, eyeFrame, nowMs) {
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+
+  [eyes.left, eyes.right].forEach((eye, index) => {
+    const pulse = 1 + Math.sin(nowMs * 0.013 + index * 1.2) * 0.08;
+    const ringRadius = eyeFrame.eyeGap * (0.28 + index * 0.02) * pulse;
+
+    const inflamed = ctx.createRadialGradient(
+      eye.x,
+      eye.y,
+      ringRadius * 0.16,
+      eye.x,
+      eye.y,
+      ringRadius
+    );
+    inflamed.addColorStop(0, "rgba(255, 244, 230, 0.86)");
+    inflamed.addColorStop(0.45, "rgba(255, 132, 112, 0.44)");
+    inflamed.addColorStop(1, "rgba(150, 40, 44, 0)");
+    ctx.fillStyle = inflamed;
+    ctx.beginPath();
+    ctx.arc(eye.x, eye.y, ringRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 9; i += 1) {
+      const angle = (Math.PI * 2 * i) / 9 + Math.sin(nowMs * 0.003 + i) * 0.2;
+      const x2 = eye.x + Math.cos(angle) * ringRadius * (0.65 + (i % 3) * 0.2);
+      const y2 = eye.y + Math.sin(angle) * ringRadius * (0.65 + (i % 3) * 0.2);
+      ctx.strokeStyle = `rgba(185, 58, 63, ${0.24 + (i % 4) * 0.05})`;
+      ctx.lineWidth = Math.max(0.75, eyeFrame.eyeGap * 0.012);
+      ctx.beginPath();
+      ctx.moveTo(eye.x, eye.y);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    const pupilGunk = ctx.createRadialGradient(
+      eye.x,
+      eye.y,
+      ringRadius * 0.05,
+      eye.x,
+      eye.y,
+      ringRadius * 0.45
+    );
+    pupilGunk.addColorStop(0, "rgba(198, 215, 122, 0.55)");
+    pupilGunk.addColorStop(0.5, "rgba(142, 155, 85, 0.22)");
+    pupilGunk.addColorStop(1, "rgba(104, 114, 64, 0)");
+    ctx.fillStyle = pupilGunk;
+    ctx.beginPath();
+    ctx.arc(eye.x, eye.y, ringRadius * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+function drawNeonRingsEyes(eyes, eyeFrame, nowMs) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  [eyes.left, eyes.right].forEach((eye, index) => {
+    const base = eyeFrame.eyeGap * (0.22 + index * 0.015);
+    const huePulse = 1 + Math.sin(nowMs * 0.012 + index) * 0.08;
+    const rings = [
+      { color: "255, 72, 176", mul: 1.08, width: 0.12 },
+      { color: "76, 232, 255", mul: 0.78, width: 0.1 },
+      { color: "151, 255, 124", mul: 0.52, width: 0.08 }
+    ];
+
+    rings.forEach((ring, ringIndex) => {
+      const wobble =
+        Math.sin(nowMs * 0.006 + ringIndex * 1.4 + index * 0.8) *
+        base *
+        0.08;
+      const radius = base * ring.mul * huePulse + wobble;
+      ctx.strokeStyle = `rgba(${ring.color}, ${0.74 - ringIndex * 0.14})`;
+      ctx.lineWidth = Math.max(1, eyeFrame.eyeGap * ring.width);
+      ctx.shadowBlur = 8 + ringIndex * 4;
+      ctx.shadowColor = `rgba(${ring.color}, 0.52)`;
+      ctx.beginPath();
+      ctx.arc(eye.x, eye.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    const pupil = ctx.createRadialGradient(
+      eye.x,
+      eye.y,
+      base * 0.05,
+      eye.x,
+      eye.y,
+      base * 0.45
+    );
+    pupil.addColorStop(0, "rgba(255, 255, 255, 0.85)");
+    pupil.addColorStop(0.45, "rgba(112, 255, 243, 0.52)");
+    pupil.addColorStop(1, "rgba(112, 255, 243, 0)");
+    ctx.fillStyle = pupil;
+    ctx.beginPath();
+    ctx.arc(eye.x, eye.y, base * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
 function drawFrostGazeEyes(eyes, eyeFrame, nowMs) {
   const pulse = 1 + Math.sin(nowMs * 0.01) * 0.08;
 
@@ -1866,6 +2572,10 @@ function drawEyeEffects(nowMs) {
     drawEnergyGlowEyes(eyes, eyeFrame, nowMs);
   } else if (effect === "ember") {
     drawMoltenIrisEyes(eyes, eyeFrame, nowMs);
+  } else if (effect === "irritated") {
+    drawIrritatedEyes(eyes, eyeFrame, nowMs);
+  } else if (effect === "neon") {
+    drawNeonRingsEyes(eyes, eyeFrame, nowMs);
   } else if (effect === "frost") {
     drawFrostGazeEyes(eyes, eyeFrame, nowMs);
   } else if (effect === "xray") {
